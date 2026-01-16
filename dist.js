@@ -47,7 +47,7 @@ exeFiles.forEach((file) => {
 
 // Copy plugins themselves.
 const pluginSrc = path.resolve(__dirname, 'bin', 'obs-plugins', 'win64');
-const pluginDst = path.resolve(__dirname, 'dist', 'obs-plugins');
+const pluginDst = path.resolve(__dirname, 'dist', 'obs-plugins', 'win64');
 
 fs.cpSync(pluginSrc, pluginDst, { 
   recursive: true ,  
