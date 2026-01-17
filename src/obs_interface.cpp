@@ -771,7 +771,7 @@ void draw_callback(void* data, uint32_t cx, uint32_t cy) {
   }
 }
 
-void ObsInterface::initPreview(uint32_t parent_handle) {
+void ObsInterface::initPreview(uintptr_t parent_handle) {
 
   blog(LOG_INFO, "ObsInterface::initPreview");
 

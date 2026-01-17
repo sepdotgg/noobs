@@ -76,7 +76,7 @@ class ObsInterface {
     void getSourcePos(std::string name, vec2* pos, vec2* size, vec2* scale, obs_sceneitem_crop* crop); // Size is returned to allow clients to calculate scale.
     void setSourcePos(std::string name, vec2* pos, vec2* scale, obs_sceneitem_crop* crop); // Size does not get set here because it's set by the source itself.
 
-    void initPreview(uint32_t parent_handle); // Must call this before showPreview to setup resources.
+    void initPreview(uintptr_t parent_handle); // Must call this before showPreview to setup resources.
     void configurePreview(int x, int y, int width, int height); // Move and resize the preview display.
     void showPreview(); // Show the preview display.
     void hidePreview(); // Hide the preview display, but leave it running.
