@@ -1,8 +1,14 @@
-#include <windows.h>
-#include <obs.h>
+#include "win_compat.h"
 #include "utils.h"
 #include "obs_interface.h"
+#if defined(__linux__)
+#include <X11/X.h>
+#include <X11/Xlib.h>
+#endif
+#include <cstddef>
+#include <cstdint>
 #include <vector>
+#include <stdexcept>
 #include <string>
 #include <graphics/matrix4.h>
 #include <graphics/vec4.h>
@@ -765,7 +771,14 @@ void draw_callback(void* data, uint32_t cx, uint32_t cy) {
   }
 }
 
-void ObsInterface::initPreview(HWND parent) {
+void ObsInterface::initPreview(uint32_t parent_handle) {
+
+  #ifdef _WIN32
+  HWND parent = (HWND)parent_handle;
+  #elif defined(__linux__)
+  Window parent = (Window)parent_handle;
+  #endif
+
   blog(LOG_INFO, "ObsInterface::initPreview");
 
   if (!preview_hwnd) {
@@ -784,12 +797,26 @@ void ObsInterface::initPreview(HWND parent) {
       NULL
     );
 
-    if (!preview_hwnd) {
+    Display* display = XOpenDisplay(nullptr);
+
+    preview_window = XCreateSimpleWindow(
+      display,                // Display ID - use default
+      parent,                 // Window ID from electron electron
+      0, 0,                   // Initial position (x, y)
+      0, 0,                   // Initial size (width, height)
+        0,                 // border width
+        0,                 // border pixel
+        0                  // background pixel
+    );
+    
+    if (!preview_hwnd && !preview_window) {
       blog(LOG_ERROR, "Failed to create preview child window");
       return;
     }
 
+    #ifdef _WIN32 // X11 sets the parent when the window is created
     SetParent(preview_hwnd, parent);
+    #endif
 
     LONG_PTR style = GetWindowLongPtr(preview_hwnd, GWL_STYLE);
     style &= ~WS_POPUP;
@@ -811,7 +838,13 @@ void ObsInterface::initPreview(HWND parent) {
     gs_data.format = GS_BGRA;
     gs_data.zsformat = GS_ZS_NONE;
     gs_data.num_backbuffers = 1;
-    gs_data.window.hwnd = preview_hwnd;
+    #ifdef _WIN32
+      gs_data.window.hwnd = preview_hwnd;
+    #else
+      // TODO: Create an X11 window
+      gs_data.window.id = 0;
+      gs_data.window.display = nullptr; // No X11 connection for now, or let it use the default
+    #endif
 
     display = obs_display_create(&gs_data, 0x0);
 

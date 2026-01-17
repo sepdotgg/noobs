@@ -1,11 +1,16 @@
 #pragma once
 
+#include <cstdint>
 #include <obs.h>
 #include <napi.h>
-#include <windows.h>
+#include "win_compat.h"
 #include <map>
 #include <string>
 #include <optional>
+#ifdef __linux__
+  #include <X11/Xlib.h>
+  #include <X11/Xutil.h>
+#endif
 
 #define AUDIO_INPUT "wasapi_input_capture"
 #define AUDIO_OUTPUT "wasapi_output_capture"
@@ -71,7 +76,7 @@ class ObsInterface {
     void getSourcePos(std::string name, vec2* pos, vec2* size, vec2* scale, obs_sceneitem_crop* crop); // Size is returned to allow clients to calculate scale.
     void setSourcePos(std::string name, vec2* pos, vec2* scale, obs_sceneitem_crop* crop); // Size does not get set here because it's set by the source itself.
 
-    void initPreview(HWND parent); // Must call this before showPreview to setup resources.
+    void initPreview(uint32_t parent_handle); // Must call this before showPreview to setup resources.
     void configurePreview(int x, int y, int width, int height); // Move and resize the preview display.
     void showPreview(); // Show the preview display.
     void hidePreview(); // Hide the preview display, but leave it running.
@@ -102,6 +107,9 @@ class ObsInterface {
     
     obs_display_t *display = nullptr;
     HWND preview_hwnd = nullptr; // window handle for scene preview
+    #ifndef _WIN32
+    Window preview_window = 0;
+    #endif
     Napi::ThreadSafeFunction jscb; // javascript callback
     std::string recording_path = ""; 
     std::string unbuffered_output_filename = "";

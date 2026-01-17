@@ -1,13 +1,15 @@
 #include <napi.h>
-#include <windows.h>
+#include "win_compat.h"
 #include <obs.h>
 #include "obs_interface.h"
 #include "utils.h"
 
 ObsInterface* obs = nullptr;
 
-extern "C" __declspec(dllexport) DWORD NvOptimusEnablement = 1;
-extern "C" __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+#ifdef _WIN32
+  extern "C" __declspec(dllexport) DWORD NvOptimusEnablement = 1;
+  extern "C" __declspec(dllexport) int AmdPowerXpressRequestHighPerformance = 1;
+#endif
 
 Napi::Value ObsInit(const Napi::CallbackInfo& info) {
   bool valid = info.Length() == 3 &&
@@ -242,8 +244,9 @@ Napi::Value ObsInitPreview(const Napi::CallbackInfo& info) {
     return info.Env().Undefined();
   }
 
-  HWND hwnd = *reinterpret_cast<HWND*>(buffer.Data());
-  obs->initPreview(hwnd);
+  uintptr_t parent_handle = 0;
+  std::memcpy(&parent_handle, buffer.Data(), std::min(buffer.Length(), sizeof(parent_handle)));
+  obs->initPreview(parent_handle);
   return info.Env().Undefined();
 }
 

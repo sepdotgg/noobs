@@ -5,7 +5,7 @@
 #include <iomanip>
 #include <sstream>
 #include "utils.h"
-#include <windows.h>
+#include "win_compat.h"
 
 void log_handler(int lvl, const char *msg, va_list args, void *p) {
   static std::stringstream logFileName;
