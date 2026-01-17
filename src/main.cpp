@@ -1,3 +1,4 @@
+#include <cstdint>
 #include <napi.h>
 #include "win_compat.h"
 #include <obs.h>
@@ -239,8 +240,16 @@ Napi::Value ObsInitPreview(const Napi::CallbackInfo& info) {
 
   Napi::Buffer<uint8_t> buffer = info[0].As<Napi::Buffer<uint8_t>>();
 
-  if (buffer.Length() < sizeof(HWND)) {
-    Napi::TypeError::New(info.Env(), "Buffer too small for HWND").ThrowAsJavaScriptException();
+  #ifdef _WIN32
+  constexpr size_t minBufferSize = sizeof(HWND);
+  #elif defined(__linux__)
+  constexpr size_t minBufferSize = sizeof(unsigned long);
+  #else
+  constexpr size_t minBufferSize = sizeof(void*);
+  #endif
+
+  if (buffer.Length() < minBufferSize) {
+    Napi::TypeError::New(info.Env(), "Buffer too small for HWND/Window").ThrowAsJavaScriptException();
     return info.Env().Undefined();
   }
 

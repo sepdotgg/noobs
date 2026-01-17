@@ -7,7 +7,7 @@
 #include <map>
 #include <string>
 #include <optional>
-#ifdef __linux__
+#if defined(__linux__)
   #include <X11/Xlib.h>
   #include <X11/Xutil.h>
 #endif
