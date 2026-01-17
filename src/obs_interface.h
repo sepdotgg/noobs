@@ -106,9 +106,11 @@ class ObsInterface {
     obs_encoder_t *audio_encoder = nullptr;
     
     obs_display_t *display = nullptr;
+    #ifdef _WIN32
     HWND preview_hwnd = nullptr; // window handle for scene preview
-    #ifndef _WIN32
+    #elif defined(__linux__)
     Window preview_window = 0;
+    Display* x11_display = nullptr;
     #endif
     Napi::ThreadSafeFunction jscb; // javascript callback
     std::string recording_path = ""; 

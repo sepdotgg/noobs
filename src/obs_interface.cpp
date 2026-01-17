@@ -773,15 +773,13 @@ void draw_callback(void* data, uint32_t cx, uint32_t cy) {
 
 void ObsInterface::initPreview(uint32_t parent_handle) {
 
-  #ifdef _WIN32
-  HWND parent = (HWND)parent_handle;
-  #elif defined(__linux__)
-  Window parent = (Window)parent_handle;
-  #endif
-
   blog(LOG_INFO, "ObsInterface::initPreview");
 
+  #ifdef _WIN32
+
   if (!preview_hwnd) {
+    HWND parent = (HWND)parent_handle;
+
     blog(LOG_INFO, "Creating preview child window");
 
     preview_hwnd = CreateWindowEx(
@@ -797,26 +795,12 @@ void ObsInterface::initPreview(uint32_t parent_handle) {
       NULL
     );
 
-    Display* display = XOpenDisplay(nullptr);
-
-    preview_window = XCreateSimpleWindow(
-      display,                // Display ID - use default
-      parent,                 // Window ID from electron electron
-      0, 0,                   // Initial position (x, y)
-      0, 0,                   // Initial size (width, height)
-        0,                 // border width
-        0,                 // border pixel
-        0                  // background pixel
-    );
-    
-    if (!preview_hwnd && !preview_window) {
+    if (!preview_hwnd) {
       blog(LOG_ERROR, "Failed to create preview child window");
       return;
     }
 
-    #ifdef _WIN32 // X11 sets the parent when the window is created
     SetParent(preview_hwnd, parent);
-    #endif
 
     LONG_PTR style = GetWindowLongPtr(preview_hwnd, GWL_STYLE);
     style &= ~WS_POPUP;
@@ -827,6 +811,31 @@ void ObsInterface::initPreview(uint32_t parent_handle) {
     exStyle |= WS_EX_TRANSPARENT;
     SetWindowLongPtr(preview_hwnd, GWL_EXSTYLE, exStyle);
   }
+
+  #elif defined(__linux__)
+
+  Window parent = (Window)parent_handle;
+
+  if (!preview_window) {
+    x11_display = XOpenDisplay(nullptr);
+
+    preview_window = XCreateSimpleWindow(
+      x11_display,            // Display ID - use default
+      parent,                 // Window ID from electron electron
+      0, 0,                   // Initial position (x, y)
+      0, 0,                   // Initial size (width, height)
+      0,                      // border width
+      0,                      // border pixel
+      0                       // background pixel
+    );
+
+    if (!preview_window) {
+      blog(LOG_ERROR, "Failed to create preview child window");
+      return;
+    }
+  }
+
+  #endif
 
   if (!display) {
     blog(LOG_INFO, "Create OBS display in child window");
@@ -843,7 +852,7 @@ void ObsInterface::initPreview(uint32_t parent_handle) {
     #else
       // TODO: Create an X11 window
       gs_data.window.id = 0;
-      gs_data.window.display = nullptr; // No X11 connection for now, or let it use the default
+      gs_data.window.display = x11_display; // No X11 connection for now, or let it use the default
     #endif
 
     display = obs_display_create(&gs_data, 0x0);
@@ -862,10 +871,17 @@ void ObsInterface::initPreview(uint32_t parent_handle) {
 void ObsInterface::configurePreview(int x, int y, int width, int height) {
   blog(LOG_INFO, "ObsInterface::configurePreview");
 
+  #ifdef _WIN32
   if (!preview_hwnd) {
     blog(LOG_ERROR, "Preview window not initialized");
     return;
   }
+  #elif defined(__linux__)
+  if (!preview_window) {
+    blog(LOG_ERROR, "Preview window not initialized");
+    return;
+  }
+  #endif
 
   if (!display) {
     blog(LOG_ERROR, "Preview display not initialized");
@@ -874,14 +890,21 @@ void ObsInterface::configurePreview(int x, int y, int width, int height) {
 
   blog(LOG_INFO, "Moving preview child window to (%d, %d) with size (%d x %d)", x, y, width, height);
 
+  bool success;
+
+  #ifdef _WIN32
   // Resize and move the existing child window.
-  bool success = SetWindowPos(
+  success = SetWindowPos(
     preview_hwnd,                  // Handle to the child window
     NULL,                          // No Z-order change
     x, y,                          // New position (x, y)
     width, height,                 // New size (width, height)
     SWP_NOACTIVATE                 // Flags
   );
+  #elif defined(__linux__)
+  XMoveResizeWindow(x11_display, preview_window, x, y, width, height);
+  success = true; // X11 is not straightforward about this, but this is unlikely to fail
+  #endif
 
   if (!success) {
     blog(LOG_ERROR, "Failed to resize preview window to (%d x %d)", width, height);
@@ -895,27 +918,57 @@ void ObsInterface::configurePreview(int x, int y, int width, int height) {
 void ObsInterface::showPreview() {
   blog(LOG_INFO, "ObsInterface::showPreview");
 
+  #ifdef _WIN32
   if (!preview_hwnd) {
     blog(LOG_ERROR, "Preview window not initialized");
     return;
   }
+  #elif defined(__linux__)
+  if (!preview_window) {
+    blog(LOG_ERROR, "Preview window not initialized");
+    return;
+  }
+  #endif
 
   if (!display) {
     blog(LOG_ERROR, "Preview display not initialized");
     return;
   }
 
+  #ifdef _WIN32
+
   ShowWindow(preview_hwnd, SW_SHOW);
+  blog(LOG_INFO, "Preview child window shown");
+
+  #elif defined(__linux__)
+
+  XMapWindow(x11_display, preview_window);
+  XFlush(x11_display);
+  blog(LOG_INFO, "Preview child window shown");
+  
+  #endif
   obs_display_set_enabled(display, true);
 }
 
 void ObsInterface::hidePreview() {
   blog(LOG_INFO, "ObsInterface::hidePreview");
+  
+  #ifdef _WIN32
 
   if (preview_hwnd) {
     ShowWindow(preview_hwnd, SW_HIDE);
     blog(LOG_INFO, "Preview child window hidden");
   }
+
+  #elif defined(__linux__)
+
+  if (preview_window) {
+    XUnmapWindow(x11_display, preview_window);
+    XFlush(x11_display);
+    blog(LOG_INFO, "Preview child window hidden");
+  }
+
+  #endif
 }
 
 void ObsInterface::disablePreview() {
@@ -992,6 +1045,14 @@ ObsInterface::ObsInterface(
 
 ObsInterface::~ObsInterface() {
   blog(LOG_DEBUG, "Shutting down");
+
+  // ensure any XServer connections are closed from the preview window
+  #ifdef __linux__
+  if (x11_display) {
+    XCloseDisplay(x11_display);
+    x11_display = nullptr;
+  }
+  #endif
 
   for (auto& kv : volmeters) {
     obs_volmeter_t* volmeter = kv.second;
