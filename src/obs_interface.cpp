@@ -1,3 +1,5 @@
+#include "obs-data.h"
+#include "util/base.h"
 #include "win_compat.h"
 #include "utils.h"
 #include "obs_interface.h"
@@ -13,6 +15,11 @@
 #include <graphics/matrix4.h>
 #include <graphics/vec4.h>
 #include <util/platform.h>
+
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <cstdio>
+
 
 void call_jscb(Napi::Env env, Napi::Function cb, SignalData* sd) {
   Napi::Object obj = Napi::Object::New(env);
@@ -142,7 +149,13 @@ int ObsInterface::reset_video(int fps, int width, int height) {
   ovi.scale_type = OBS_SCALE_BILINEAR;
   ovi.adapter = 0;
   ovi.gpu_conversion = true;
-  ovi.graphics_module = "libobs-d3d11.dll"; 
+  #ifdef _WIN32
+    ovi.graphics_module = "libobs-d3d11.dll";
+  #elif defined(__linux__)
+    ovi.graphics_module = "libobs-opengl";
+  #else
+    #error "Unsupported platform"
+  #endif
 
   int rc = obs_reset_video(&ovi);
 
@@ -182,8 +195,15 @@ void ObsInterface::init_obs(const std::string& distPath) {
     basePath += '/';
   }
 
+  #ifdef _WIN32
+    std::string pluginPath = basePath + "obs-plugins/win64/";
+  #elif defined(__linux__)
+    std::string pluginPath = basePath + "obs-plugins/linux/";
+  #else
+    #error "Unsupported platform"
+  #endif
+
   std::string effectsPath = basePath + "data/effects/";
-  std::string pluginPath = basePath + "obs-plugins/win64/";
   std::string pluginDataPath = basePath + "data/obs-plugins/";
 
   blog(LOG_INFO, "Base path: %s", basePath.c_str());
@@ -196,7 +216,7 @@ void ObsInterface::init_obs(const std::string& distPath) {
   // libobs but it works for now.
   obs_add_data_path(effectsPath.c_str());
 
-  // This must come before loading modules to initialize D3D11.
+  // This must come before loading modules to initialize D3D11/OpenGL
   // Choose some sensible defaults that can be reconfigured.
   int rc = reset_video(60, 1920, 1080);
 
@@ -210,19 +230,42 @@ void ObsInterface::init_obs(const std::string& distPath) {
     throw std::runtime_error("Failed to reset audio!");
   }
 
+  #ifdef _WIN32
   std::vector<std::string> modules = { 
-    "obs-x264",     // Software encoder.
-    "obs-ffmpeg",   // Contains AMF (AMD) encoder support.
-    "win-capture",  // Required for basically all forms of capture on Windows.
-    "image-source", // Required for image sources.
-    "win-wasapi",   // Required for WASAPI audio input.
-    "obs-nvenc",    // Required for NVENC video encoding.
-    "obs-qsv11",    // Required for QSV video encoding.
-    "obs-filters"   // Required for audio filters.
+    "obs-x264",     // Software encoder
+    "obs-ffmpeg",   // Contains AMF (AMD) encoder support
+    "win-capture",  // Required for basically all forms of capture on Windows
+    "image-source", // Required for image sources
+    "win-wasapi",   // Required for WASAPI audio input
+    "obs-nvenc",    // Required for NVENC video encoding
+    "obs-qsv11",    // Required for QSV video encoding
+    "obs-filters"   // Required for audio filters
   };
+  #elif defined(__linux__)
+    std::vector<std::string> modules = { 
+      "obs-x264",         // Software encoder
+      "obs-ffmpeg",       // Contains AMF (AMD) encoder support
+      "linux-capture",    // Required for screen/window capture on Linux
+      "image-source",     // Required for image sources
+      "linux-pipewire",   // Required for PulseAudio audio input
+      "linux-pulseaudio", // Required for PulseAudio audio input
+      "obs-nvenc",        // Required for NVENC video encoding
+      "obs-qsv11",        // Required for QSV video encoding
+      "obs-filters"       // Required for audio filters
+      // TODO: [linux-port] Add Pipewire audio extension support for per-window audio capture: https://github.com/dimtpap/obs-pipewire-audio-capture
+    };
+  #else
+    #error "Unsupported platform"
+  #endif
 
   for (const auto& module : modules) {
+    #ifdef _WIN32
     std::string modulePath = pluginPath + module + ".dll";
+    #elif defined(__linux__)
+      std::string modulePath = pluginPath + module + ".so";
+    #else
+      #error "Unsupported platform"
+    #endif
     std::string moduleDataPath = pluginDataPath + module;
 
     // NVENC fails if there is no NVENC hardware support.
@@ -231,7 +274,9 @@ void ObsInterface::init_obs(const std::string& distPath) {
   }
   
   obs_post_load_modules();
+  #ifdef _WIN32 // X11/Linux does not require window class registration
   register_preview_window_class();
+  #endif
 
   list_encoders();
   list_source_types();
@@ -403,13 +448,13 @@ void ObsInterface::volmeter_callback(void *data,
   self->jscb.NonBlockingCall(sd, call_jscb);
 }
 
-std::string ObsInterface::createSource(std::string name, std::string type) {
+std::string ObsInterface::createSource(std::string name, std::string type, obs_data_t* settings) {
   blog(LOG_INFO, "Create source: %s of type %s", name.c_str(), type.c_str());
 
   obs_source_t *source = obs_source_create(
     type.c_str(), // Type of source, e.g. "wasapi_input_capture"
     name.c_str(), // Name of the source, e.g. "My Audio Input"
-    NULL, // No settings.
+    settings,
     NULL  // No hotkey data.
   );
 
@@ -742,8 +787,9 @@ void draw_callback(void* data, uint32_t cx, uint32_t cy) {
   // Renders the scene now the graphics context is setup.
   // obs_render_main_texture();
   obs_source_t *source = obs_scene_get_source(obsInterface->scene);
-  if (source)
+  if (source) {
     obs_source_video_render(source);
+  }
 
   // Draw boxes around sources, if enabled.
   if (obsInterface->getDrawSourceOutlineEnabled()) {
@@ -823,7 +869,7 @@ void ObsInterface::initPreview(uintptr_t parent_handle) {
       x11_display,            // Display ID - use default
       parent,                 // Window ID from electron electron
       0, 0,                   // Initial position (x, y)
-      0, 0,                   // Initial size (width, height)
+      1, 1,                   // Initial size (width, height) -- 0 is BadValue in X11
       0,                      // border width
       0,                      // border pixel
       0                       // background pixel
@@ -833,6 +879,8 @@ void ObsInterface::initPreview(uintptr_t parent_handle) {
       blog(LOG_ERROR, "Failed to create preview child window");
       return;
     }
+
+    make_window_click_through(x11_display, preview_window);
   }
 
   #endif
@@ -851,7 +899,7 @@ void ObsInterface::initPreview(uintptr_t parent_handle) {
       gs_data.window.hwnd = preview_hwnd;
     #else
       // TODO: Create an X11 window
-      gs_data.window.id = 0;
+      gs_data.window.id = preview_window;
       gs_data.window.display = x11_display; // No X11 connection for now, or let it use the default
     #endif
 
@@ -903,6 +951,8 @@ void ObsInterface::configurePreview(int x, int y, int width, int height) {
   );
   #elif defined(__linux__)
   XMoveResizeWindow(x11_display, preview_window, x, y, width, height);
+  XMapRaised(x11_display, preview_window);
+  XFlush(x11_display);
   success = true; // X11 is not straightforward about this, but this is unlikely to fail
   #endif
 
@@ -1327,6 +1377,24 @@ void ObsInterface::removeSourceFromScene(std::string name) {
   obs_sceneitem_remove(item);
   blog(LOG_INFO, "ObsInterface::removeSourceFromScene exited");
 }
+
+// TODO: BEGIN TEMPORARY CODE TO TEST PIPEWIRE
+void ObsInterface::showSource(std::string name) {
+  blog(LOG_INFO, "ObsInterface::showSource called for source: %s", name.c_str());
+  
+  auto it = sources.find(name);
+  
+  if (it == sources.end()) {
+    blog(LOG_WARNING, "Source %s not found when showing", name.c_str());
+    return;
+  }
+  
+  obs_source_t* source = it->second;
+  obs_source_inc_showing(source);
+  
+  blog(LOG_INFO, "ObsInterface::showSource exited for source: %s", name.c_str());
+}
+// TODO: END TEMPORARY CODE TO TEST PIPEWIRE
 
 void ObsInterface::getSourcePos(std::string name, vec2* pos, vec2* size, vec2* scale, obs_sceneitem_crop* crop) 
 {

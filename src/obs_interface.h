@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <obs.h>
 #include <napi.h>
+#include "obs-data.h"
 #include "win_compat.h"
 #include <map>
 #include <string>
@@ -60,7 +61,7 @@ class ObsInterface {
     void setRecordingCfg(const std::string& recordingPath, const std::string& fileExtension); // Set the recording path.
     void setVideoContext(int fps, int width, int height); // Reset video settings.
 
-    std::string createSource(std::string name, std::string type); // Create a new source, returns the name of the source which can vary from the requested.
+    std::string createSource(std::string name, std::string type, obs_data_t* settings); // Create a new source, returns the name of the source which can vary from the requested.
     void deleteSource(std::string name); // Release a source.
     obs_data_t* getSourceSettings(std::string name); // Get the current settings.
     void setSourceSettings(std::string name, obs_data_t* settings); // Set settings.
@@ -75,6 +76,9 @@ class ObsInterface {
     void removeSourceFromScene(std::string name); // Remove source from scene.
     void getSourcePos(std::string name, vec2* pos, vec2* size, vec2* scale, obs_sceneitem_crop* crop); // Size is returned to allow clients to calculate scale.
     void setSourcePos(std::string name, vec2* pos, vec2* scale, obs_sceneitem_crop* crop); // Size does not get set here because it's set by the source itself.
+    // TODO: BEGIN TEMPORARY CODE TO TEST PIPEWIRE
+    void showSource(std::string name); // Show a source (activates PipeWire streams).
+    // TODO: END TEMPORARY CODE TO TEST PIPEWIRE
 
     void initPreview(uintptr_t parent_handle); // Must call this before showPreview to setup resources.
     void configurePreview(int x, int y, int width, int height); // Move and resize the preview display.

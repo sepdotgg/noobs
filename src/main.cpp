@@ -1,5 +1,6 @@
 #include <cstdint>
 #include <napi.h>
+#include "obs-data.h"
 #include "win_compat.h"
 #include <obs.h>
 #include "obs_interface.h"
@@ -243,7 +244,9 @@ Napi::Value ObsInitPreview(const Napi::CallbackInfo& info) {
   #ifdef _WIN32
   constexpr size_t minBufferSize = sizeof(HWND);
   #elif defined(__linux__)
-  constexpr size_t minBufferSize = sizeof(unsigned long);
+  // Electron passes a 4 byte integer to maintain 32-bit compat
+  // https://github.com/electron/electron/issues/19068
+  constexpr size_t minBufferSize = sizeof(uint32_t); 
   #else
   constexpr size_t minBufferSize = sizeof(void*);
   #endif
@@ -348,9 +351,11 @@ Napi::Value ObsCreateSource(const Napi::CallbackInfo& info) {
     return info.Env().Undefined();
   }
 
-  bool valid = info.Length() == 2 &&
-   info[0].IsString() && // Source name
-   info[1].IsString();   // Source type
+  bool valid = 
+    (info.Length() == 2 || info.Length() == 3) &&
+    info[0].IsString() && 
+    info[1].IsString() &&
+    (info.Length() == 2 || info[2].IsObject()); // TODO: [linux-port] Pipewire settings, need to create initial due to RestoreToken
 
   if (!valid) {
     Napi::TypeError::New(info.Env(), "Invalid arguments passed to ObsCreateSource").ThrowAsJavaScriptException();
@@ -360,7 +365,17 @@ Napi::Value ObsCreateSource(const Napi::CallbackInfo& info) {
   std::string name = info[0].As<Napi::String>().Utf8Value();
   std::string type = info[1].As<Napi::String>().Utf8Value();
 
-  std::string real_name = obs->createSource(name, type);
+  obs_data_t* settings = nullptr;
+  if (info.Length() == 3) {
+    Napi::Object obj = info[2].As<Napi::Object>();
+    settings = napi_to_data(obj);
+  }
+
+  std::string real_name = obs->createSource(name, type, settings);
+
+  if (settings) {
+    obs_data_release(settings);
+  }
   return Napi::String::New(info.Env(), real_name);
 }
 
@@ -590,6 +605,27 @@ Napi::Value ObsRemoveSourceFromScene(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
+// TODO: BEGIN TEMPORARY CODE TO TEST PIPEWIRE
+Napi::Value ObsShowSource(const Napi::CallbackInfo& info) {
+  if (!obs) {
+    blog(LOG_ERROR, "ObsShowSource called but obs is not initialized");
+    Napi::Error::New(info.Env(), "Obs not initialized").ThrowAsJavaScriptException();
+    return info.Env().Undefined();
+  }
+
+  bool valid = info.Length() == 1 && info[0].IsString();
+
+  if (!valid) {
+    Napi::TypeError::New(info.Env(), "Invalid arguments passed to ObsShowSource").ThrowAsJavaScriptException();
+    return info.Env().Undefined();
+  }
+
+  std::string name = info[0].As<Napi::String>().Utf8Value();
+  obs->showSource(name);
+  return info.Env().Undefined();
+}
+// TODO: END TEMPORARY CODE TO TEST PIPEWIRE
+
 Napi::Value ObsGetSourcePos(const Napi::CallbackInfo& info) {
   if (!obs) {
     blog(LOG_ERROR, "ObsGetSourcePos called but obs is not initialized");
@@ -709,6 +745,9 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   exports.Set("AddSourceToScene", Napi::Function::New(env, ObsAddSourceToScene));
   exports.Set("RemoveSourceFromScene", Napi::Function::New(env, ObsRemoveSourceFromScene));
+  // TODO: BEGIN TEMPORARY CODE TO TEST PIPEWIRE
+  exports.Set("ShowSource", Napi::Function::New(env, ObsShowSource));
+  // TODO: END TEMPORARY CODE TO TEST PIPEWIRE
   exports.Set("GetSourcePos", Napi::Function::New(env, ObsGetSourcePos));
   exports.Set("SetSourcePos", Napi::Function::New(env, ObsSetSourcePos));
 
