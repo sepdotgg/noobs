@@ -9,6 +9,9 @@
 #endif
 #include <cstddef>
 #include <cstdint>
+// TODO: [linux-port] for platform-agnostic paths
+#include <filesystem>
+// TODO; [linux-port] END
 #include <vector>
 #include <stdexcept>
 #include <string>
@@ -1251,7 +1254,10 @@ void ObsInterface::startRecording(int offset) {
     }
   } else {
     obs_data_t *ffmpeg_settings = obs_data_create();
-    std::string filename = recording_path + "\\" + get_current_date_time() + "." + file_extension;
+    // TODO: [linux-port] filesystem paths on all platforms
+    std::filesystem::path filepath = std::filesystem::path(recording_path) / (get_current_date_time() + "." + file_extension);
+    std::string filename = filepath.string();
+    // TODO: [linux-port] END
     obs_data_set_string(ffmpeg_settings,  "path", filename.c_str());
     obs_output_update(output, ffmpeg_settings);
     obs_data_release(ffmpeg_settings);

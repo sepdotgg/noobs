@@ -1,6 +1,9 @@
 #include <iostream>
 #include <obs.h>
 #include <fstream>
+// TODO: [linux-port] for filesystem paths 
+#include <filesystem>
+// TODO: [linux-port] END
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -23,7 +26,9 @@ void log_handler(int lvl, const char *msg, va_list args, void *p) {
     std::string logDir = static_cast<const char*>(p);
 
     if (!logDir.empty() && logDir.back() != '\\' && logDir.back() != '/') {
-      logDir += '\\';
+      // TODO: [linux-port] use platform filesystem path
+      logDir += std::filesystem::path::preferred_separator;
+      // TODO: [linux-port] END
     }
       
     logFileName << logDir << "OBS-" << std::put_time(std::localtime(&t), "%Y-%m-%d") << ".log";
