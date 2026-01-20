@@ -6,6 +6,7 @@
 #if defined(__linux__)
 #include <X11/X.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
 #endif
 #include <cstddef>
 #include <cstdint>
@@ -18,9 +19,6 @@
 #include <graphics/matrix4.h>
 #include <graphics/vec4.h>
 #include <util/platform.h>
-
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
 #include <cstdio>
 
 
