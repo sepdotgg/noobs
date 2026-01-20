@@ -1,6 +1,6 @@
 #include "obs-data.h"
+#include "obs.h"
 #include "util/base.h"
-#include "win_compat.h"
 #include "utils.h"
 #include "obs_interface.h"
 #if defined(__linux__)
@@ -254,8 +254,8 @@ void ObsInterface::init_obs(const std::string& distPath) {
       "linux-pulseaudio", // Required for PulseAudio audio input
       "obs-nvenc",        // Required for NVENC video encoding
       "obs-qsv11",        // Required for QSV video encoding
-      "obs-filters"       // Required for audio filters
-      // TODO: [linux-port] Add Pipewire audio extension support for per-window audio capture: https://github.com/dimtpap/obs-pipewire-audio-capture
+      "obs-filters",      // Required for audio filters
+      "linux-pipewire-audio"  // TODO: [linux-port] Required for per-window audio capture: https://github.com/dimtpap/obs-pipewire-audio-capture
     };
   #else
     #error "Unsupported platform"
@@ -1383,24 +1383,6 @@ void ObsInterface::removeSourceFromScene(std::string name) {
   obs_sceneitem_remove(item);
   blog(LOG_INFO, "ObsInterface::removeSourceFromScene exited");
 }
-
-// TODO: BEGIN TEMPORARY CODE TO TEST PIPEWIRE
-void ObsInterface::showSource(std::string name) {
-  blog(LOG_INFO, "ObsInterface::showSource called for source: %s", name.c_str());
-  
-  auto it = sources.find(name);
-  
-  if (it == sources.end()) {
-    blog(LOG_WARNING, "Source %s not found when showing", name.c_str());
-    return;
-  }
-  
-  obs_source_t* source = it->second;
-  obs_source_inc_showing(source);
-  
-  blog(LOG_INFO, "ObsInterface::showSource exited for source: %s", name.c_str());
-}
-// TODO: END TEMPORARY CODE TO TEST PIPEWIRE
 
 void ObsInterface::getSourcePos(std::string name, vec2* pos, vec2* size, vec2* scale, obs_sceneitem_crop* crop) 
 {

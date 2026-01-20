@@ -605,27 +605,6 @@ Napi::Value ObsRemoveSourceFromScene(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
-// TODO: BEGIN TEMPORARY CODE TO TEST PIPEWIRE
-Napi::Value ObsShowSource(const Napi::CallbackInfo& info) {
-  if (!obs) {
-    blog(LOG_ERROR, "ObsShowSource called but obs is not initialized");
-    Napi::Error::New(info.Env(), "Obs not initialized").ThrowAsJavaScriptException();
-    return info.Env().Undefined();
-  }
-
-  bool valid = info.Length() == 1 && info[0].IsString();
-
-  if (!valid) {
-    Napi::TypeError::New(info.Env(), "Invalid arguments passed to ObsShowSource").ThrowAsJavaScriptException();
-    return info.Env().Undefined();
-  }
-
-  std::string name = info[0].As<Napi::String>().Utf8Value();
-  obs->showSource(name);
-  return info.Env().Undefined();
-}
-// TODO: END TEMPORARY CODE TO TEST PIPEWIRE
-
 Napi::Value ObsGetSourcePos(const Napi::CallbackInfo& info) {
   if (!obs) {
     blog(LOG_ERROR, "ObsGetSourcePos called but obs is not initialized");
@@ -745,9 +724,6 @@ Napi::Object Init(Napi::Env env, Napi::Object exports) {
 
   exports.Set("AddSourceToScene", Napi::Function::New(env, ObsAddSourceToScene));
   exports.Set("RemoveSourceFromScene", Napi::Function::New(env, ObsRemoveSourceFromScene));
-  // TODO: BEGIN TEMPORARY CODE TO TEST PIPEWIRE
-  exports.Set("ShowSource", Napi::Function::New(env, ObsShowSource));
-  // TODO: END TEMPORARY CODE TO TEST PIPEWIRE
   exports.Set("GetSourcePos", Napi::Function::New(env, ObsGetSourcePos));
   exports.Set("SetSourcePos", Napi::Function::New(env, ObsSetSourcePos));
 

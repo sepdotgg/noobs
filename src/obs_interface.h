@@ -13,9 +13,16 @@
   #include <X11/Xutil.h>
 #endif
 
+// TODO [linux-port]: Linux audio sources
+#ifdef _WIN32
 #define AUDIO_INPUT "wasapi_input_capture"
 #define AUDIO_OUTPUT "wasapi_output_capture"
 #define AUDIO_PROCESS "wasapi_process_output_capture"
+#elif defined(__linux__)
+#define AUDIO_INPUT "pulse_input_capture"
+#define AUDIO_OUTPUT "pulse_output_capture"
+#define AUDIO_PROCESS "pipewire_audio_application_capture"
+#endif
 
 class ObsInterface;
 
@@ -76,9 +83,6 @@ class ObsInterface {
     void removeSourceFromScene(std::string name); // Remove source from scene.
     void getSourcePos(std::string name, vec2* pos, vec2* size, vec2* scale, obs_sceneitem_crop* crop); // Size is returned to allow clients to calculate scale.
     void setSourcePos(std::string name, vec2* pos, vec2* scale, obs_sceneitem_crop* crop); // Size does not get set here because it's set by the source itself.
-    // TODO: BEGIN TEMPORARY CODE TO TEST PIPEWIRE
-    void showSource(std::string name); // Show a source (activates PipeWire streams).
-    // TODO: END TEMPORARY CODE TO TEST PIPEWIRE
 
     void initPreview(uintptr_t parent_handle); // Must call this before showPreview to setup resources.
     void configurePreview(int x, int y, int width, int height); // Move and resize the preview display.
@@ -110,12 +114,14 @@ class ObsInterface {
     obs_encoder_t *audio_encoder = nullptr;
     
     obs_display_t *display = nullptr;
+    // TODO: [linux-port]
     #ifdef _WIN32
     HWND preview_hwnd = nullptr; // window handle for scene preview
     #elif defined(__linux__)
     Window preview_window = 0;
     Display* x11_display = nullptr;
     #endif
+    // TODO: [linux-port] END
     Napi::ThreadSafeFunction jscb; // javascript callback
     std::string recording_path = ""; 
     std::string unbuffered_output_filename = "";
