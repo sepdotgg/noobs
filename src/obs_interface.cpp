@@ -1,8 +1,10 @@
+#include "obs-audio-controls.h"
 #include "obs-data.h"
 #include "obs.h"
 #include "util/base.h"
 #include "utils.h"
 #include "obs_interface.h"
+#include <thread>
 #if defined(__linux__)
 #include <X11/X.h>
 #include <X11/Xlib.h>
@@ -441,6 +443,9 @@ void ObsInterface::volmeter_callback(void *data,
   SignalContext* ctx = static_cast<SignalContext*>(data);
   ObsInterface* self = ctx->self;
 
+  if (self->is_shutting_down())
+    return;
+
   if (!self->volmeter_enabled) {
     return;
   }
@@ -643,6 +648,13 @@ obs_properties_t* ObsInterface::getSourceProperties(std::string name) {
 }
 
 void ObsInterface::output_signal_handler(void *data, calldata_t *cd) {
+
+  auto *ctx  = static_cast<SignalContext*>(data);
+  auto *self = ctx->self;
+
+  if (self->is_shutting_down())
+    return;
+
   long long code = calldata_int(cd, "code");
   const char *err = calldata_string(cd, "last_error");
 
@@ -651,9 +663,6 @@ void ObsInterface::output_signal_handler(void *data, calldata_t *cd) {
   if (err) {
     error = std::string(err);
   }
-
-  SignalContext* ctx = static_cast<SignalContext*>(data);
-  ObsInterface* self = ctx->self;
 
   SignalData* sd = new SignalData{ 
     "output", 
@@ -683,7 +692,9 @@ void ObsInterface::disconnect_signal_handlers(obs_output_t *output) {
   signal_handler_disconnect(sh, "stopping", output_signal_handler,  stopping_ctx);
   signal_handler_disconnect(sh, "stop", output_signal_handler,  stop_ctx);
   signal_handler_disconnect(sh, "activate", output_signal_handler, activate_ctx);
-  signal_handler_disconnect(sh, "deactivate ", output_signal_handler, deactivate_ctx);
+  // TODO: [linux-port] Fix typo in deactivate signal
+  signal_handler_disconnect(sh, "deactivate", output_signal_handler, deactivate_ctx);
+  // TODO: [linux-port]
 }
 
 bool draw_source_outline(obs_scene_t *scene, obs_sceneitem_t *item, void *p) {
@@ -757,7 +768,10 @@ bool draw_source_outline(obs_scene_t *scene, obs_sceneitem_t *item, void *p) {
 }
 
 void draw_callback(void* data, uint32_t cx, uint32_t cy) {
-  ObsInterface* obsInterface = (ObsInterface*)data;
+  auto* obsInterface = static_cast<ObsInterface*>(data);
+
+  if (obsInterface->is_shutting_down())
+    return;
 
   obs_video_info ovi;
   obs_get_video_info(&ovi);
@@ -899,9 +913,8 @@ void ObsInterface::initPreview(uintptr_t parent_handle) {
     #ifdef _WIN32
       gs_data.window.hwnd = preview_hwnd;
     #else
-      // TODO: Create an X11 window
       gs_data.window.id = preview_window;
-      gs_data.window.display = x11_display; // No X11 connection for now, or let it use the default
+      gs_data.window.display = x11_display;
     #endif
 
     display = obs_display_create(&gs_data, 0x0);
@@ -1094,10 +1107,20 @@ ObsInterface::ObsInterface(
   create_audio_encoders();
 }
 
+// TODO: [linux-port] rewrite the deconstructor to ensure unnwinding/prevent segfaults
 ObsInterface::~ObsInterface() {
   blog(LOG_DEBUG, "Shutting down");
 
-  // ensure any XServer connections are closed from the preview window
+  shutting_down.store(true);
+
+  // clean up the display and draw callback
+  if (display) {
+    obs_display_set_enabled(display, false);
+    obs_display_remove_draw_callback(display, draw_callback, this);
+    obs_display_destroy(display);
+    display = nullptr;
+  }
+
   #ifdef __linux__
   if (x11_display) {
     XCloseDisplay(x11_display);
@@ -1105,21 +1128,93 @@ ObsInterface::~ObsInterface() {
   }
   #endif
 
-  for (auto& kv : volmeters) {
-    obs_volmeter_t* volmeter = kv.second;
-    obs_volmeter_remove_callback(volmeter, volmeter_callback, this);
+  // cleanup volmeters
+  for (auto& [name, volmeter] : volmeters) {
+    auto it = volmeter_cb_ctx.find(name);
+    SignalContext* ctx = (it != volmeter_cb_ctx.end()) ? it->second : nullptr;
+    if (ctx) {
+      obs_volmeter_remove_callback(volmeter, volmeter_callback, ctx);
+    }
     obs_volmeter_detach_source(volmeter);
     obs_volmeter_destroy(volmeter);
-    blog(LOG_INFO, "Volmeter deleted for source: %s", kv.first.c_str());
-    volmeters.erase(kv.first);
+    if (ctx) {
+      delete ctx;
+    }
+  }
+  volmeters.clear();
+  volmeter_cb_ctx.clear();
+
+  // set clear the output source
+  obs_set_output_source(0, nullptr);
+
+  // disconnect signal handlers before deleting their contexts
+  if (output) {
+    disconnect_signal_handlers(output);
+
+    // try to cleanly stop the output for 2s
+    if (obs_output_active(output)) {
+      blog(LOG_DEBUG, "Stopping output");
+      obs_output_stop(output);
+
+      for (int i = 0; i < 200 && obs_output_active(output); i++) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+
+      // well, we tried ¯\_(ツ)_/¯
+      if (obs_output_active(output)) {
+        blog(LOG_DEBUG, "Output still active, force stopping");
+        obs_output_force_stop(output);
+      }
+    }
+
+    blog(LOG_DEBUG, "Releasing output");
+    obs_output_release(output);
+    output = nullptr;
   }
 
-  for (auto& kv : volmeter_cb_ctx) {
-    SignalContext* ctx = kv.second;
-    delete ctx;
-    volmeter_cb_ctx.erase(kv.first);
+  // cleanup encoders
+  if (video_encoder) {
+    blog(LOG_DEBUG, "Releasing video encoder");
+    obs_encoder_release(video_encoder);
+    video_encoder = nullptr;
+  }
+  if (audio_encoder) {
+    blog(LOG_DEBUG, "Releasing audio encoder");
+    obs_encoder_release(audio_encoder);
+    audio_encoder = nullptr;
   }
 
+  // cleanup sources
+  for (auto& [name, source] : sources) {
+
+    // cleanup from the scene
+    removeSourceFromScene(name);
+
+    // cleanup source filters
+    if (auto it = filters.find(name); it != filters.end()) {
+      auto& [k, filter] = *it;
+      blog(LOG_INFO, "Beginning filter removal for source: %s on shutdown", name.c_str());
+
+      obs_source_filter_remove(source, filter);
+      obs_source_release(filter);
+      filters.erase(it);
+      blog(LOG_INFO, "Filter removed for source: %s on shutdown", name.c_str());
+    }
+
+    blog(LOG_DEBUG, "Releasing source: %s", name.c_str());
+    obs_source_remove(source);
+    obs_source_release(source);
+  }
+
+  sources.clear();
+  sizes.clear();
+
+  if (scene) {
+    obs_scene_release(scene);
+    scene = nullptr;
+  }
+
+  // delete the signal handlers
   delete starting_ctx;
   delete start_ctx;
   delete stopping_ctx;
@@ -1127,50 +1222,7 @@ ObsInterface::~ObsInterface() {
   delete activate_ctx;
   delete deactivate_ctx;
 
-  for (auto& kv : sources) {
-    std::string name = kv.first;
-    obs_source_t* source = kv.second;
-
-    auto filter_it = filters.find(name);
-
-    if (filter_it != filters.end()) {
-      obs_source_t* filter = filter_it->second;
-      obs_source_filter_remove(source, filter);
-      obs_source_release(filter);
-      filters.erase(name);
-      blog(LOG_INFO, "Filter removed for source: %s on shutdown", name.c_str());
-    }
-
-    blog(LOG_DEBUG, "Releasing source: %s", name.c_str());
-    obs_source_release(source);
-    sources.erase(name);
-  }
-
-  if (scene) {
-    blog(LOG_DEBUG, "Releasing scene");
-    obs_scene_release(scene);
-  }
-
-  if (output) {
-    if (obs_output_active(output)) {
-      blog(LOG_DEBUG, "Force stopping output");
-      obs_output_force_stop(output);
-    }
-      
-    blog(LOG_DEBUG, "Releasing output");
-    obs_output_release(output);
-  }
-
-  // if (video_encoder) {
-  //   blog(LOG_DEBUG, "Releasing video encoder");
-  //   obs_encoder_release(video_encoder);
-  // }
-
-  // if (audio_encoder) {
-  //   blog(LOG_DEBUG, "Releasing audio encoder");
-  //   obs_encoder_release(audio_encoder);
-  // }
-
+  // finally, shut down OBS
   blog(LOG_DEBUG, "Now shutting down OBS");
   obs_shutdown();
 
@@ -1181,6 +1233,7 @@ ObsInterface::~ObsInterface() {
 
   blog(LOG_DEBUG, "Shutdown complete");
 }
+// TODO: [linux-port] END
 
 void ObsInterface::setBuffering(bool value) {
   if (obs_output_active(output)) {

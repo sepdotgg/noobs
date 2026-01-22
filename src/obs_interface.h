@@ -8,6 +8,7 @@
 #include <map>
 #include <string>
 #include <optional>
+#include <atomic>
 #if defined(__linux__)
   #include <X11/Xlib.h>
   #include <X11/Xutil.h>
@@ -59,6 +60,10 @@ class ObsInterface {
 
     ~ObsInterface();
 
+    bool is_shutting_down() const noexcept {
+      return shutting_down.load(std::memory_order_relaxed);
+    }
+
     void startBuffering(); // Start buffering to memory.
     void startRecording(int offset); // Convert the active buffered recording to a real one.
     void stopRecording(); // Stop the recording.
@@ -108,6 +113,7 @@ class ObsInterface {
     obs_scene_t *scene = nullptr;
 
   private:
+    std::atomic<bool> shutting_down{false};;
     obs_output_t *output = nullptr;
 
     obs_encoder_t *video_encoder = nullptr;
