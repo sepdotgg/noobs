@@ -1435,6 +1435,21 @@ void ObsInterface::removeSourceFromScene(std::string name) {
   blog(LOG_INFO, "ObsInterface::removeSourceFromScene exited");
 }
 
+void ObsInterface::setSceneItemOrder(std::string name, obs_order_movement movement) {
+  blog(LOG_INFO, "ObsInterface::setSceneItemOrder called for source: %s with movement: %d", name.c_str(), movement);
+
+  obs_sceneitem_t *item = obs_scene_find_source(scene, name.c_str());
+  
+  if (!item) {
+    blog(LOG_WARNING, "Did not find scene item for source: %s", name.c_str());
+    return;
+  }
+
+  obs_sceneitem_set_order(item, movement);
+  
+  blog(LOG_INFO, "ObsInterface::setSceneItemOrder exited");
+}
+
 void ObsInterface::getSourcePos(std::string name, vec2* pos, vec2* size, vec2* scale, obs_sceneitem_crop* crop) 
 {
   auto it = sources.find(name);
