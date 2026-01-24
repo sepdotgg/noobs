@@ -1,28 +1,61 @@
-#include "obs-audio-controls.h"
-#include "obs-data.h"
-#include "obs.h"
-#include "util/base.h"
-#include "utils.h"
 #include "obs_interface.h"
-#include <thread>
+
+#include "utils.h"
+
+// OBS/library headers
+#include <cstdarg>
+#include <cstring>
+#include <obs.h>
+#include <obs-audio-controls.h>
+#include <obs-data.h>
+#include <graphics/matrix4.h>
+#include <graphics/vec4.h>
+#include <util/base.h>
+#include <util/platform.h>
+
+// Platform headers
 #if defined(__linux__)
 #include <X11/X.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #endif
+
+// std
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 // TODO: [linux-port] for platform-agnostic paths
 #include <filesystem>
 // TODO; [linux-port] END
-#include <vector>
 #include <stdexcept>
 #include <string>
-#include <graphics/matrix4.h>
-#include <graphics/vec4.h>
-#include <util/platform.h>
-#include <cstdio>
+#include <thread>
+#include <vector>
 
+// TODO: [linux-port] custom blog handler to filter out some pipewire spam on linux
+static log_handler_t root_log_handler = nullptr;
+static void * root_log_param = nullptr;
+
+static void filtered_log_handler(int log_level, const char *msg, va_list args, void *p) {
+  
+  va_list args_copy;
+  va_copy(args_copy, args);
+
+  char buffer[4096];
+  vsnprintf(buffer, sizeof(buffer), msg, args_copy);
+  va_end(args_copy);
+
+  // supporess pipewire spam when the cursor moves
+  if (strstr(buffer, "[pipewire] buffer contains corrupted data")) {
+    // bye
+    return;
+  }
+
+  if (root_log_handler) {
+    root_log_handler(log_level, msg, args, root_log_param);
+  }
+}
+// TODO: [linux-port] END
 
 void call_jscb(Napi::Env env, Napi::Function cb, SignalData* sd) {
   Napi::Object obj = Napi::Object::New(env);
@@ -178,6 +211,14 @@ bool ObsInterface::reset_audio() {
 }
 
 void ObsInterface::init_obs(const std::string& distPath) {
+    // TODO: [linux-port] setup filtered log handler because of some pipewire spam when the cursor is captured
+  //       The debug spam has no impact on the actual function as far as I can tell
+  #ifdef __linux__
+  base_get_log_handler(&root_log_handler, &root_log_param);
+  base_set_log_handler(filtered_log_handler, nullptr);
+  #endif
+  // TODO: [linux-port] END
+
   blog(LOG_INFO, "Initializing OBS");
   auto success = obs_startup("en-US", NULL, NULL);
 

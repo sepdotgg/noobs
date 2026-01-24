@@ -1,10 +1,14 @@
-#include <cstdint>
-#include <napi.h>
-#include "obs-data.h"
-#include "win_compat.h"
-#include <obs.h>
+// project
 #include "obs_interface.h"
 #include "utils.h"
+
+// vended headers/lib
+#include <napi.h>
+#include <obs.h>
+#include <obs-data.h>
+
+// std
+#include <cstdint>
 
 ObsInterface* obs = nullptr;
 

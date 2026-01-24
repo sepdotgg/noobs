@@ -1,18 +1,23 @@
 #pragma once
 
-#include <cstdint>
+// vended headers/libraries
 #include <obs.h>
 #include <napi.h>
-#include "obs-data.h"
-#include "win_compat.h"
-#include <map>
-#include <string>
-#include <optional>
-#include <atomic>
+#include <obs-data.h>
+
+// platform system libs
 #if defined(__linux__)
   #include <X11/Xlib.h>
   #include <X11/Xutil.h>
 #endif
+
+// std
+#include <atomic>
+#include <cstdint>
+#include <map>
+#include <optional>
+#include <string>
+
 
 // TODO [linux-port]: Linux audio sources
 #ifdef _WIN32

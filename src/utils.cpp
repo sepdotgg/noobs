@@ -1,18 +1,24 @@
-#include <iostream>
-#include <obs.h>
-#include <fstream>
-// TODO: [linux-port] for filesystem paths 
-#include <filesystem>
-// TODO: [linux-port] END
-#include <chrono>
-#include <iomanip>
-#include <sstream>
+// project
 #include "utils.h"
-#include "win_compat.h"
+
+// vended headers/libraries
+#include <obs.h>
+
+// platform system libs
 #if defined(__linux__)
 #include <X11/Xlib.h>
 #include <X11/extensions/shape.h>
 #endif
+
+// std
+#include <chrono>
+// TODO: [linux-port] for filesystem paths 
+#include <filesystem>
+// TODO: [linux-port] END
+#include <fstream>
+#include <iostream>
+#include <iomanip>
+#include <sstream>
 
 void log_handler(int lvl, const char *msg, va_list args, void *p) {
   static std::stringstream logFileName;
