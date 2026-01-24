@@ -6,7 +6,9 @@
 #include <obs-data.h>
 
 // platform system libs
-#if defined(__linux__)
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__linux__)
   #include <X11/Xlib.h>
   #include <X11/Xutil.h>
 #endif

@@ -14,10 +14,12 @@
 #include <util/platform.h>
 
 // Platform headers
-#if defined(__linux__)
-#include <X11/X.h>
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__linux__)
+  #include <X11/X.h>
+  #include <X11/Xlib.h>
+  #include <X11/Xutil.h>
 #endif
 
 // std
