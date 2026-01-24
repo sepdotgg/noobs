@@ -5,7 +5,12 @@
 #include <obs.h>
 
 // platform system libs
-#if defined(__linux__)
+#ifdef _WIN32
+  #ifndef NOMINMAX
+    #define NOMINMAX
+  #endif
+  #include <windows.h>
+#elif defined(__linux__)
 #include <X11/Xlib.h>
 #include <X11/extensions/shape.h>
 #endif
