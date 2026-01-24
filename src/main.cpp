@@ -8,6 +8,7 @@
 #include <obs-data.h>
 
 // std
+#include <algorithm>
 #include <cstdint>
 
 ObsInterface* obs = nullptr;
