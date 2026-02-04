@@ -13,7 +13,6 @@ if (process.platform === 'win32') {
     binPath += ';';
     binPath += process.env.PATH;
   }
-  process.env.Path = binPath;
 } else if (process.platform === 'linux') {
   // Linux: prepend to LD_LIBRARY_PATH for .so loading
   if (process.env.LD_LIBRARY_PATH) {
