@@ -291,9 +291,8 @@ void ObsInterface::init_obs(const std::string& distPath) {
     std::vector<std::string> modules = { 
       "obs-x264",         // Software encoder
       "obs-ffmpeg",       // Contains AMF (AMD) encoder support
-      "linux-capture",    // Required for screen/window capture on Linux
       "image-source",     // Required for image sources
-      "linux-pipewire",   // Required for PulseAudio audio input
+      "linux-pipewire",   // Required for Pipewire window/screen capture
       "linux-pulseaudio", // Required for PulseAudio audio input
       "obs-nvenc",        // Required for NVENC video encoding
       "obs-qsv11",        // Required for QSV video encoding
