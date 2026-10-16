@@ -11,13 +11,13 @@ from pathlib import Path
 SUFFIX = "-noobs"
 
 ISOLATED = [
-    "libavcodec.so.62",
-    "libavdevice.so.62",
-    "libavfilter.so.11",
-    "libavformat.so.62",
-    "libavutil.so.60",
-    "libswresample.so.6",
-    "libswscale.so.9",
+    "libavcodec.so.63",
+    "libavdevice.so.63",
+    "libavfilter.so.12",
+    "libavformat.so.63",
+    "libavutil.so.61",
+    "libswresample.so.7",
+    "libswscale.so.10",
     "libbz2.so.1.0",
     "librnnoise.so.0",
     "libspeexdsp.so.1",
